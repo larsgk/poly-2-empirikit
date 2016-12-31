@@ -1,0 +1,258 @@
+<link rel="import" href="bower_components/polymer/polymer-element.html">
+<link rel="import" href="bower_components/paper-button/paper-button.html">
+<link rel="import" href="bower_components/paper-slider/paper-slider.html">
+
+<dom-module id="main-view">
+  <template>
+    <style>
+      :host {
+        display: block;
+        position: relative;
+        overflow: hidden;
+      }
+      div.datarow {
+        width: 100%;
+        height:1.5em;
+        border-top: 1px solid #888;
+      }
+
+      span.header {
+        font-weight: bold;
+        color: #222;
+      }
+
+      span.data {
+        float:right;
+        font-weight: bold;
+        color: #555;
+      }
+
+      paper-slider {
+        width: 100%;
+      }
+
+      paper-slider.red {
+        --paper-slider-knob-color: var(--paper-red-500);
+        --paper-slider-active-color: var(--paper-red-500);
+      }
+      paper-slider.green {
+        --paper-slider-knob-color: var(--paper-green-500);
+        --paper-slider-active-color: var(--paper-green-500);
+      }
+      paper-slider.blue {
+        --paper-slider-knob-color: var(--paper-light-blue-500);
+        --paper-slider-active-color: var(--paper-light-blue-500);
+      }
+    </style>
+
+    <div>
+      <h1>empiriKit|MOTION...</h1>
+      <paper-button raised on-tap="_doScan">SCAN</paper-button>
+      <br><br>
+      <div class="datarow"><span class="header">HW found on path:</span><span class="data">[[getPath(port)]]</span></div>
+      <div class="datarow"><span class="header">Board type</span><span class="data">[[deviceType]]</span></div>
+      <div class="datarow"><span class="header">Firmware version</span><span class="data">[[firmwareVersion]]</span></div>
+      <div class="datarow"><span class="header">Capabilities</span><span class="data">[[capabilities]]</span></div>
+      <paper-slider class="colorslider red" value="{{red}}" min="0" max="100" on-change="_rgbChanged"></paper-slider>
+      <paper-slider class="colorslider green" value="{{green}}" min="0" max="100" on-change="_rgbChanged"></paper-slider>
+      <paper-slider class="colorslider blue" value="{{blue}}" min="0" max="100" on-change="_rgbChanged"></paper-slider>
+    </div>
+
+  </template>
+
+  <script>
+    var empiriKitPnPFilter = {"vendorId":0x0425,"productId":0x0408};
+    var JsonToArray = function(json)
+    {
+        var str = JSON.stringify(json, null, 0);
+        var ret = new Uint8Array(str.length);
+        for (var i = 0; i < str.length; i++) {
+            ret[i] = str.charCodeAt(i);
+        }
+        return ret;
+    };
+
+    var binArrayToJson = function(binArray)
+    {
+        var str = "";
+        for (var i = 0; i < binArray.length; i++) {
+            str += String.fromCharCode(parseInt(binArray[i]));
+        }
+        return JSON.parse(str);
+    };
+
+    var binArrayToString = function(binArray)
+    {
+        var str = "";
+        for (var i = 0; i < binArray.length; i++) {
+            str += String.fromCharCode(parseInt(binArray[i]));
+        }
+        return str;
+    };
+
+    class MainView extends Polymer.Element {
+
+      static get is() { return 'main-view' }
+
+      connectedCallback() {
+        super.connectedCallback();
+
+        this.port = null;
+        this._isScanning = false;
+        this._isConnected = false;
+        this._interMessageDelay = 10;  // 0 for immediate
+        this._messageQueue = [];
+
+        this.init();
+
+        requestAnimationFrame(this._installListeners.bind(this));
+      }
+
+      init() {
+        this._receiveStr = "";
+        this.deviceType = "";
+        this.firmwareVersion = "";
+        this.capabilities = "";
+        this.red = 100;
+        this.green = 0;
+        this.blue = 0;
+        this._rgbChanged();
+      }
+
+      _installListeners() {
+        console.log("installing listeners...");
+        document.addEventListener('SerialPortReady', _ => console.log("SerialPort lib is loaded.", SerialPort));
+      }
+
+      _rgbChanged() {
+        console.log(this.red,this.green,this.blue);
+        this.send_set_rgb(this.red, this.green, this.blue);
+      }
+
+      _handleHardwareInfo(json) {
+        this.deviceType = json.devicetype;
+        this.firmwareVersion = json.version;
+        this.capabilities = json.capabilities;
+      }
+
+      _handleMessage(message) {
+          console.log("[_handleMessage]: ", message);
+          try {
+              var json = JSON.parse(message);
+              console.log("It's JSON!", json);
+
+              if(json.datatype === "HardwareInfo") {
+                this._handleHardwareInfo(json);
+              }
+
+              // document.getElementById("lastmsg").innerHTML=JSON.stringify(json);
+
+              // if(json.datatype === "StreamData" && json.accelerometerdata) {
+              //     var accData = json.accelerometerdata;
+              //     send_set_rgb(Math.abs(accData[0]&0xff), Math.abs(accData[1]&0xff), Math.abs(accData[2]&0xff));
+              // }
+          } catch (e) {
+              console.log(e);
+          }
+      }
+
+      _onData(rdata) {
+        var rstr = binArrayToString(rdata);
+        // do hackish handling ;)
+        this._receiveStr += rstr;
+        if(rstr.indexOf("}") != -1) {
+          this._handleMessage(this._receiveStr);
+          this._receiveStr=""; // TODO: we should just eat the parsed part :)
+        }
+      }
+
+      getPath(port) {
+        if(port)
+          return port.devicePath;
+        return "N/A";
+      }
+
+      send_CMD(json) {
+        if(this.port) {
+          var encoded = JsonToArray(json);
+          if(this._interMessageDelay !== 0) {
+            this._messageQueue.push(encoded);
+            if(!this._messageQueueTimer) {
+              this._send_next_queued_cmd();
+            }
+          } else {
+            this.port.write(encoded.buffer);
+          }
+        }
+      }
+
+      /**
+       * Throttle commands sent to board so it doesn't get flooded (need to fix the FW ;))
+       */
+      _send_next_queued_cmd() {
+        this._messageQueueTimer = null;
+        if(this._messageQueue.length > 0) {
+          this._messageQueueTimer = setTimeout(this._send_next_queued_cmd.bind(this), this._interMessageDelay);
+          if(this.port) {
+            let encoded = this._messageQueue.shift();
+            //console.log("Sending", encoded);
+            this.port.write(encoded.buffer);
+          }
+        }
+      }
+
+      send_GETINF() {
+          this.send_CMD({GETINF:1});
+      }
+
+      send_start_streaming() {
+          this.send_CMD({STRACC:1});
+      }
+
+      send_set_rgb(r,g,b) {
+          this.send_CMD({SETRGB:[r,g,b]});
+      }
+
+      send_stop_streaming() {
+          this.send_CMD({STRACC:0});
+      }
+
+      send_init() {
+          setTimeout(this.send_GETINF.bind(this), 200);
+          this._rgbChanged();
+      }
+
+      _connectionClosed() {
+        console.log("Connection closed");
+        this.port = null;
+        this._isConnected = false;
+        this.init();
+      }
+
+      _doScan() {
+        console.log("_doScan...");
+        if(SerialPort && !this._isScanning) {
+          this._isScanning = true;
+          SerialPort.requestPorts([empiriKitPnPFilter]).then( ports => {
+              console.log("Serial port list: ", ports);
+
+              if(ports.length === 1) {
+                  this.port = new SerialPort(ports[0].path, {baudrate:57600});
+                  this.port.onClose = this._connectionClosed.bind(this);
+                  this.port.connect(this._onData.bind(this)).then( _ => {
+                    this._isConnected = true;
+                    this.send_init();
+                  });
+              }
+              this._isScanning = false;
+          });
+        }
+      }
+
+    }
+
+    // Register custom element definition using standard platform API
+    customElements.define(MainView.is, MainView);
+
+  </script>
+</dom-module>
