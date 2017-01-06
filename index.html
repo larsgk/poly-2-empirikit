@@ -14,7 +14,7 @@ subject to an additional IP rights grant found at http://polymer.github.io/PATEN
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, minimum-scale=1.0, initial-scale=1, user-scalable=yes">
 
-  <title>empiriKit demo</title>
+  <title>WebUSB demo</title>
 
   <script src="bower_components/webcomponentsjs/webcomponents-lite.js"></script>
   <link rel="import" href="main-view.html">
@@ -29,18 +29,5 @@ subject to an additional IP rights grant found at http://polymer.github.io/PATEN
 
 <body>
   <main-view></main-view>
-
-  <script>
-    console.log("Loading go-webserial-websocket.js");
-    var script = document.createElement('script');
-    script.async = true;
-    script.src = '/go-webserial-websocket.js';
-    script.onload = function() {
-      document.dispatchEvent(
-        new CustomEvent('SerialPortReady', {bubbles: true})
-      );
-    }
-    document.head.appendChild(script);
-  </script>
 </body>
 </html>

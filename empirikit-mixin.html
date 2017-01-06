@@ -1,0 +1,69 @@
+<script>
+
+  const EmpirikitMixin = subclass => class extends subclass {
+
+    static get config() {
+      // properties, observers meta data
+      return {
+        properties: {
+          device: {
+            type: Object,
+            observer: '_deviceChanged'
+          }
+        }
+      };
+    }
+
+    connectedCallback() {
+      super.connectedCallback();
+    }
+
+    _deviceChanged(device, oldDevice) {
+      console.log(`_deviceChanged ${oldDevice} => ${device}`);
+    }
+
+    _doScan() {
+      var self = this;
+      console.log("_doScan.");
+      navigator.usb.requestDevice({ filters: [{ vendorId: 0x0425 }] })
+      .then(selectedDevice => {
+         this.device = selectedDevice;
+        console.log("Device found:", this.device);
+         return this.device.open(); // Begin a session.
+       })
+      .then(_ => this.device.selectConfiguration(1))
+      .then(_ => this.device.claimInterface(1))
+      .then(_ => this.device.controlTransferOut({
+          requestType: 'class',
+          recipient: 'interface',
+          request: 0x22,
+          value: 0x01,
+          index: 0x01})) // Ready to receive data
+      .then(_ => { this.readFromDevice(); }) // Waiting for 64 bytes of data from endpoint #5.
+      .catch(error => { console.log(error); });
+
+    }
+
+    readFromDevice() {
+      this.device.transferIn(2, 64).then(result => {
+        let decoder = new TextDecoder();
+        let msg = JSON.parse(decoder.decode(result.data));
+        this.dispatchEvent(new CustomEvent('ek-event', {detail:msg}), {bubbles: true});
+        this.readFromDevice();
+      })
+      .catch(error => { console.log(error); this.device = null });
+    }
+
+    sendCMD(string) {
+      console.log(`Sending to serial: [${string}]\n`);
+      let data = new TextEncoder('utf-8').encode(string);
+      console.log(data);
+      if (this.device) {
+        this.device.transferOut(2, data);
+      }
+    };
+
+
+  };
+
+</script>
