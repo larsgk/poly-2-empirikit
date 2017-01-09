@@ -25,30 +25,36 @@
     _doScan() {
       var self = this;
       console.log("_doScan.");
-      navigator.usb.requestDevice({ filters: [{ vendorId: 0x0425 }] })
+      //navigator.usb.requestDevice({ filters: [{ vendorId: 0x0425 }] })
+      navigator.usb.requestDevice({ filters: [{}] })
       .then(selectedDevice => {
          this.device = selectedDevice;
         console.log("Device found:", this.device);
          return this.device.open(); // Begin a session.
        })
       .then(_ => this.device.selectConfiguration(1))
-      .then(_ => this.device.claimInterface(1))
+      .then(_ => this.device.claimInterface(2))
       .then(_ => this.device.controlTransferOut({
           requestType: 'class',
           recipient: 'interface',
           request: 0x22,
           value: 0x01,
-          index: 0x01})) // Ready to receive data
+          index: 0x02})) // Ready to receive data
       .then(_ => { this.readFromDevice(); }) // Waiting for 64 bytes of data from endpoint #5.
       .catch(error => { console.log(error); });
 
     }
 
     readFromDevice() {
-      this.device.transferIn(2, 64).then(result => {
+      this.device.transferIn(5, 64).then(result => {
         let decoder = new TextDecoder();
-        let msg = JSON.parse(decoder.decode(result.data));
-        this.dispatchEvent(new CustomEvent('ek-event', {detail:msg}), {bubbles: true});
+        let str = decoder.decode(result.data);
+        try {
+          let msg = JSON.parse(str);
+          this.dispatchEvent(new CustomEvent('ek-event', {detail:msg}), {bubbles: true});
+        } catch(e) {
+          console.log("NOT JSON:",str);
+        }
         this.readFromDevice();
       })
       .catch(error => { console.log(error); this.device = null });
@@ -59,7 +65,7 @@
       let data = new TextEncoder('utf-8').encode(string);
       console.log(data);
       if (this.device) {
-        this.device.transferOut(2, data);
+        this.device.transferOut(5, data);
       }
     };
 
