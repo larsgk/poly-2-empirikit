@@ -63,8 +63,8 @@
       <paper-slider class="colorslider red" value="{{red}}" min="0" max="255" on-change="_rgbChanged" pin></paper-slider>
       <paper-slider class="colorslider green" value="{{green}}" min="0" max="255" on-change="_rgbChanged" pin></paper-slider>
       <paper-slider class="colorslider blue" value="{{blue}}" min="0" max="255" on-change="_rgbChanged" pin></paper-slider>
-      <h3>Accelerometer data</h3>
-      <poly-graph id="polygraph" style="height:500px" resolution="100" min="-16384" max="16384"></poly-graph>
+      <h3>Accelerometer data X(min,max)=([[range.x]]), Y(min,max)=([[range.y]]), Z(min,max)=([[range.z]])</h3>
+      <poly-graph id="polygraph" style="height:500px" resolution="100" min="-32768" max="32768"></poly-graph>
     </div>
 
   </template>
@@ -87,6 +87,7 @@
         this.red = 255;
         this.green = 0;
         this.blue = 0;
+        this.range = {x:[0,0],y:[0,0],z:[0,0]};
 
         this._rgbChanged();
       }
@@ -120,6 +121,16 @@
           console.log(data.msg);
         } else {
           this.tick = data.tick;
+
+          this.range.x[0] = Math.min(data.x,this.range.x[0]);
+          this.range.x[1] = Math.max(data.x,this.range.x[1]);
+          this.range.y[0] = Math.min(data.y,this.range.y[0]);
+          this.range.y[1] = Math.max(data.y,this.range.y[1]);
+          this.range.z[0] = Math.min(data.z,this.range.z[0]);
+          this.range.z[1] = Math.max(data.z,this.range.z[1]);
+
+          this.notifyPath('range');
+
           this.pgel.addValue('red',data.x);
           this.pgel.addValue('green',data.y);
           this.pgel.addValue('blue',data.z);
