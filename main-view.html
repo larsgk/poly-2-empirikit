@@ -53,6 +53,7 @@
     <div>
       <h1>Polymer 2 WebUSB demo</h1>
       <paper-button raised on-tap="_doScan">SCAN</paper-button>
+      <paper-button raised on-tap="_getInfo">HW INFO</paper-button>
       <paper-button raised on-tap="_doRandomColor">RANDOM COLOR!</paper-button>
       <br><br>
       <div class="datarow"><span class="header">VID/PID</span><span class="data">[[getVidPid(device)]]</span></div>
@@ -109,6 +110,10 @@
         this.sendCMD(`{"SETRGB":[${this.red},${this.green},${this.blue}]}`);
       }
 
+      _getInfo() {
+        this.sendCMD(`{}`);
+      }
+
       _handleHardwareInfo(json) {
         this.deviceType = json.devicetype;
         this.firmwareVersion = json.version;
@@ -120,20 +125,24 @@
         if(data.msg) {
           console.log(data.msg);
         } else {
-          this.tick = data.tick;
+          if(data.tick) {
+            this.tick = data.tick;
 
-          this.range.x[0] = Math.min(data.x,this.range.x[0]);
-          this.range.x[1] = Math.max(data.x,this.range.x[1]);
-          this.range.y[0] = Math.min(data.y,this.range.y[0]);
-          this.range.y[1] = Math.max(data.y,this.range.y[1]);
-          this.range.z[0] = Math.min(data.z,this.range.z[0]);
-          this.range.z[1] = Math.max(data.z,this.range.z[1]);
+            this.range.x[0] = Math.min(data.x,this.range.x[0]);
+            this.range.x[1] = Math.max(data.x,this.range.x[1]);
+            this.range.y[0] = Math.min(data.y,this.range.y[0]);
+            this.range.y[1] = Math.max(data.y,this.range.y[1]);
+            this.range.z[0] = Math.min(data.z,this.range.z[0]);
+            this.range.z[1] = Math.max(data.z,this.range.z[1]);
 
-          this.notifyPath('range');
+            this.notifyPath('range');
 
-          this.pgel.addValue('red',data.x);
-          this.pgel.addValue('green',data.y);
-          this.pgel.addValue('blue',data.z);
+            this.pgel.addValue('red',data.x);
+            this.pgel.addValue('green',data.y);
+            this.pgel.addValue('blue',data.z);
+          } else {
+            console.log(data);
+          }
         }
       }
 

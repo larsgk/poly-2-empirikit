@@ -16,6 +16,8 @@
 
     connectedCallback() {
       super.connectedCallback();
+
+      this.rstring = "";
     }
 
     _deviceChanged(device, oldDevice) {
@@ -48,12 +50,18 @@
     readFromDevice() {
       this.device.transferIn(5, 64).then(result => {
         let decoder = new TextDecoder();
-        let str = decoder.decode(result.data);
-        try {
-          let msg = JSON.parse(str);
-          this.dispatchEvent(new CustomEvent('ek-event', {detail:msg}), {bubbles: true});
-        } catch(e) {
-          console.log("NOT JSON:",str);
+        this.rstring += decoder.decode(result.data);
+        // do a quick JSON smoketest (should do better with decoder/streaming)
+        let startb = (this.rstring.match(/{/g)||[]).length;
+        let endb = (this.rstring.match(/}/g)||[]).length;
+        if(startb > 0 && startb === endb) {
+          try {
+            let msg = JSON.parse(this.rstring);
+            this.dispatchEvent(new CustomEvent('ek-event', {detail:msg}), {bubbles: true});
+          } catch(e) {
+            console.log("NOT JSON:",this.rstring);
+          }
+          this.rstring = "";
         }
         this.readFromDevice();
       })
