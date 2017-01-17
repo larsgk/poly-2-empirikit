@@ -54,18 +54,23 @@
       <h1>Polymer 2 WebUSB demo</h1>
       <paper-button raised on-tap="_doScan">SCAN</paper-button>
       <paper-button raised on-tap="_getInfo">HW INFO</paper-button>
+      <paper-button raised on-tap="_getHelp">CMD HELP</paper-button>
       <paper-button raised on-tap="_doRandomColor">RANDOM COLOR!</paper-button>
+      <paper-button raised on-tap="_doStartStream">STREAM ON</paper-button>
+      <paper-button raised on-tap="_doStopStream">STREAM OFF</paper-button>
       <br><br>
       <div class="datarow"><span class="header">VID/PID</span><span class="data">[[getVidPid(device)]]</span></div>
       <div class="datarow"><span class="header">Manufacturer name</span><span class="data">[[device.manufacturerName]]</span></div>
       <div class="datarow"><span class="header">Product name</span><span class="data">[[device.productName]]</span></div>
       <div class="datarow"><span class="header">Serial number</span><span class="data">[[device.serialNumber]]</span></div>
-      <div class="datarow"><span class="header">Tick</span><span class="data">[[tick]]</span></div>
+      <div class="datarow"><span class="header">Capabilities</span><span class="data">[[capabilities]]</span></div>
+      <div class="datarow"><span class="header">UID</span><span class="data">[[uid]]</span></div>
+      <div class="datarow"><span class="header">FW Version</span><span class="data">[[version]]</span></div>
       <paper-slider class="colorslider red" value="{{red}}" min="0" max="255" on-change="_rgbChanged" pin></paper-slider>
       <paper-slider class="colorslider green" value="{{green}}" min="0" max="255" on-change="_rgbChanged" pin></paper-slider>
       <paper-slider class="colorslider blue" value="{{blue}}" min="0" max="255" on-change="_rgbChanged" pin></paper-slider>
       <h3>Accelerometer data X(min,max)=([[range.x]]), Y(min,max)=([[range.y]]), Z(min,max)=([[range.z]])</h3>
-      <poly-graph id="polygraph" style="height:500px" resolution="100" min="-32768" max="32768"></poly-graph>
+      <poly-graph id="polygraph" style="height:400px" resolution="100" min="-32768" max="32768"></poly-graph>
     </div>
 
   </template>
@@ -84,7 +89,9 @@
 
       init() {
         this._receiveStr = "";
-        this.tick = 0;
+        this.deviceType = "";
+        this.firmwareVersion = "";
+        this.capabilities = [];
         this.red = 255;
         this.green = 0;
         this.blue = 0;
@@ -103,6 +110,7 @@
         this.pgel.addPen('red', {color:'#d00', name:'X'});
         this.pgel.addPen('green', {color:'#0d0', name:'Y'});
         this.pgel.addPen('blue', {color:'#00d', name:'Z'});
+        this.pgel.addPen('black', {color:'#000', name:'Touch'});
       }
 
       _rgbChanged() {
@@ -111,7 +119,21 @@
       }
 
       _getInfo() {
+        this.sendCMD(`{"GETINF":1}`);
+      }
+
+      _getHelp() {
         this.sendCMD(`{}`);
+      }
+
+      _doStartStream() {
+        this.sendCMD('{"STRACC":1}')
+        this.sendCMD('{"STRTCH":1}')
+      }
+
+      _doStopStream() {
+        this.sendCMD('{"STRACC":0}')
+        this.sendCMD('{"STRTCH":0}')
       }
 
       _handleHardwareInfo(json) {
@@ -122,27 +144,35 @@
 
       _handleMessage(msg) {
         var data = msg.detail;
-        if(data.msg) {
-          console.log(data.msg);
-        } else {
-          if(data.tick) {
-            this.tick = data.tick;
+        if(data.datatype === "StreamData") {
+          this.tick = data.tick;
+          let accel = data.accelerometerdata;
+          let touch = data.touchsensordata;
 
-            this.range.x[0] = Math.min(data.x,this.range.x[0]);
-            this.range.x[1] = Math.max(data.x,this.range.x[1]);
-            this.range.y[0] = Math.min(data.y,this.range.y[0]);
-            this.range.y[1] = Math.max(data.y,this.range.y[1]);
-            this.range.z[0] = Math.min(data.z,this.range.z[0]);
-            this.range.z[1] = Math.max(data.z,this.range.z[1]);
+          if(accel !== undefined) {
+            this.range.x[0] = Math.min(accel[0],this.range.x[0]);
+            this.range.x[1] = Math.max(accel[0],this.range.x[1]);
+            this.range.y[0] = Math.min(accel[1],this.range.y[0]);
+            this.range.y[1] = Math.max(accel[1],this.range.y[1]);
+            this.range.z[0] = Math.min(accel[2],this.range.z[0]);
+            this.range.z[1] = Math.max(accel[2],this.range.z[1]);
 
             this.notifyPath('range');
 
-            this.pgel.addValue('red',data.x);
-            this.pgel.addValue('green',data.y);
-            this.pgel.addValue('blue',data.z);
-          } else {
-            console.log(data);
+            this.pgel.addValue('red',accel[0]);
+            this.pgel.addValue('green',accel[1]);
+            this.pgel.addValue('blue',accel[2]);
           }
+
+          if(touch !== undefined) {
+            this.pgel.addValue('black',((touch-20)<<14) * 0.1);
+          }
+        } else if(data.datatype === "HardwareInfo") {
+          this.capabilities = data.capabilities;
+          this.uid = data.uid;
+          this.version = data.version;
+        } else {
+          console.log(data);
         }
       }
 
