@@ -18,31 +18,43 @@
       super.connectedCallback();
 
       this.rstring = "";
+
+      navigator.usb.getDevices()
+      .then(availableDevices => {
+        if(availableDevices.length){
+          this._openDevice(availableDevices[0]); // Begin a session.
+        }
+        throw "no device available yet";
+      })
+      .catch(error => { console.log(error); });
+
+      navigator.usb.addEventListener('connect', evt => this._openDevice(evt.device));
     }
 
     _deviceChanged(device, oldDevice) {
       console.log(`_deviceChanged ${oldDevice} => ${device}`);
     }
 
-    _doScan() {
-      var self = this;
-      console.log("_doScan.");
-      //navigator.usb.requestDevice({ filters: [{ vendorId: 0x0425 }] })
-      navigator.usb.requestDevice({ filters: [{}] })
-      .then(selectedDevice => {
-         this.device = selectedDevice;
-        console.log("Device found:", this.device);
-         return this.device.open(); // Begin a session.
-       })
-      .then(_ => this.device.selectConfiguration(1))
-      .then(_ => this.device.claimInterface(2))
-      .then(_ => this.device.controlTransferOut({
+    _openDevice(device) {
+      device.open()
+      .then(_ => device.selectConfiguration(1))
+      .then(_ => device.claimInterface(2))
+      .then(_ => device.controlTransferOut({
           requestType: 'class',
           recipient: 'interface',
           request: 0x22,
           value: 0x01,
           index: 0x02})) // Ready to receive data
-      .then(_ => { this.readFromDevice(); }) // Waiting for 64 bytes of data from endpoint #5.
+      .then(_ => { this.device = device; this.readFromDevice(); }) // Waiting for 64 bytes of data from endpoint #5.
+      .catch(error => { console.log(error); });
+    }
+
+    _doScan() {
+      console.log("_doScan.");
+      navigator.usb.requestDevice({ filters: [{vendorId: 0x1209, productId: 0xD017}] })
+      .then(selectedDevice => {
+        this._openDevice(selectedDevice);
+       })
       .catch(error => { console.log(error); });
 
     }
